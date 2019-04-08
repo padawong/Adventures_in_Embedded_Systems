@@ -1,6 +1,6 @@
 /* Erin Wong, ewong012@ucr.edu
  * Lab Section: 26
- * Assignment: Lab #2  Exercise #3
+ * Assignment: Lab #2  Exercise #1
  *	
  * I acknowledge all content contained herein, excluding template or example
  * code, is my own original work.
