@@ -1,5 +1,11 @@
-/*
- * ewong012_lab1_part1.c
+/* Erin Wong, ewong012@ucr.edu
+ * Lab Section: 26
+ * Assignment: Lab #2  Exercise #3
+ *	
+ * I acknowledge all content contained herein, excluding template or example
+ * code, is my own original work.
+ * 
+ * ewong012_lab2_part1.c
  *
  * Created: 4/3/2019 11:29:22 AM
  * Author : erinb
