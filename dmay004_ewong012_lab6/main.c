@@ -2,7 +2,7 @@
  *	Partner 1 Name & E-mail: David May; dmay004@ucr.edu
  *	Partner 2 Name & E-mail: Erin Wong; ewong012@ucr.edu
  *	Lab Section: 026
- *	Assignment: Lab 4 Exercise 2
+ *	Assignment: Lab 6 Exercise 1
  *	
  *	I acknowledge all content contained herein, excluding template or example
  *	code, is my own original work.
