@@ -1,0 +1,25 @@
+120B Project: Home Security System
+
+Components: 
+
+- Keypad for code input and reset
+  * STILL HAVING A GHOSTING PROBLEM ON COLUMN 0
+    + Just stick to the other columns
+
+- EEPROM to retain correct input code despite shutdown
+
+- LCD 16x2 display for messages and code input
+  * Special characters
+  * '#' followed by 4-digit code
+  * Default code is "0000"
+  * Code can be reset by holding down '0' and '#' for 3 seconds
+
+- Servo motor to simulate lock/unlock
+  * When correct code input, turn 180 degrees counterclockwise
+  * When lock initiated ('#'), turn 180 degrees clockwise
+
+- PIR sensor to detect motion
+  * If motion detected for 3+ seconds, ALARM
+  
+- Piezoelectric speaker to sound alarm
+  * If wrong code input 3 times, sound alarm and display message on LCD
