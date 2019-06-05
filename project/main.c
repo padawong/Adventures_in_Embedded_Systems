@@ -35,8 +35,9 @@ unsigned long _avr_timer_cntcurr = 0;
 unsigned char note = 0;
 
 void TimerOn() {
-	TCCR1B = (1<<WGM12)|(1<<WGM13)|(1<<CS10)|(1<<CS11); // CTC1 = WGM12 //
-	//TCCR1B = 0x0B;
+	// NOTE: I thought I needed to have TCCR1B as follows for the servo to work, but it was causing super long cycle times
+	//TCCR1B = (1<<WGM12)|(1<<WGM13)|(1<<CS10)|(1<<CS11); // CTC1 = WGM12 //
+	TCCR1B = 0x0B; // Working fine with servo
 	OCR1A = 60; // Changed from 125 to accommodate servo hopefully
 	TIMSK1 = 0x02;
 	TCNT1=0;
@@ -66,8 +67,21 @@ void TimerSet(unsigned long M) {
 	_avr_timer_cntcurr = _avr_timer_M;
 }
 
+// LCD Special characters
+
+
 #define num_tasks 5
 task tasks[num_tasks];
+
+/*
+#include <avr/eeprom.h>
+// EEPROM attempt without a working board :'|
+#define CODE_ADDRESS 0x00
+EEPROM_write(CODE_ADDRESS, '#');
+for (unsigned char i = 1; i < 6; i++) {
+	EEPROM_write(i + CODE_ADDRESS, 0);
+}
+*/
 
 // Global variables
 unsigned char start;
@@ -75,6 +89,7 @@ unsigned char code[5] = "#0000";
 unsigned char input[5];
 unsigned char input_num;
 unsigned char invalid; // Display and Alarm check if invalid > 0
+unsigned char attempts;
 unsigned char alarm;
 unsigned char valid;
 //unsigned char lock;
@@ -106,6 +121,7 @@ int TickFct_Input (int Input_state) {
 			}
 			input_num = 0;
 			invalid = 0;
+			attempts = 0;
 			alarm = 0;
 			valid = 0;
 			//lock = 0;
@@ -134,7 +150,7 @@ int TickFct_Input (int Input_state) {
 				invalid = 1;
 				//Input_state = Input_Invalid;
 			}
-			if (input_num == 5 && invalid == 1) {
+			if (input_num == 5 && invalid > 0) {
 				Input_state = Input_Invalid;
 			}
 			//TEST[input_num] = input[input_num];
@@ -151,7 +167,7 @@ int TickFct_Input (int Input_state) {
 			break;
 			
 		case Input_Invalid: 
-			if (invalid >= 3) {
+			if (attempts >= 3) {
 				Input_state = Input_Alarm;
 			}
 			break;
@@ -171,7 +187,7 @@ int TickFct_Input (int Input_state) {
 			
 		case Input_Wait:	
 			value = GetKeypadKey();
-			if(value != '\0') {
+			if(value != '\0' && value == '#') {
 				input[input_num] = value;
 				input_num++;
 			}
@@ -192,12 +208,18 @@ int TickFct_Input (int Input_state) {
 			break;
 		
 		case Input_Invalid:
-			invalid++;
+			attempts++;
 			for (unsigned char i = 0; i < 5; i++) {
 				input[i] = '-';
 			}
+			invalid = 0;
 			input_num = 0;
-			Input_state = Input_Wait;
+			if (alarm > 0) {
+				Input_state = Input_Alarm;
+			}
+			else {
+				Input_state = Input_Wait;
+			}
 			break;
 			
 		case Input_Alarm:
@@ -277,10 +299,10 @@ int TickFct_Alarm (int Alarm_state) {
 			}
 			break;
 		case Alarm_Motion:
-			if (i < 300 && ((PIND) & (1<<PIR_sensor)) == 1) {
-				PIR_Status = 1;
+			if (i < 300 && (((PIND) & (1<<PIR_sensor)) == 0)) {
+				PIR_Status = 0;
 			}
-			else if (i >= 300 && ((PIND) & (1<<PIR_sensor))) {
+			else if (i >= 300 && PIR_Status > 0) {
 				motion_trigger = 1; 
 				Alarm_state = Alarm_Alarm;
 			}
@@ -395,7 +417,21 @@ int TickFct_Reset (int Reset_state) {
 enum Display_States {Display_Default, Display_Input, Display_Unlock, Display_Lock, Display_Invalid, Display_Alarm, Display_Reset} Display_state ;
 int TickFct_Display (int Display_state) {
 	
-	unsigned char i = 0;
+	static unsigned char i = 0;
+	unsigned char heart[8] = { 0x00, 0x0A, 0x15, 0x11, 0x0A, 0x04, 0x00, 0x00 }; // heart
+	unsigned char phone[8] = { 0x04, 0x1F, 0x11, 0x11, 0x1F, 0x1F, 0x1F, 0x1F }; // phone
+	unsigned char bell[8] = { 0x04, 0x0E, 0x0E, 0x0E, 0x1F, 0x00, 0x04, 0x00 }; // bell
+	unsigned char speaker[8] = { 0x01, 0x03, 0x07, 0x1F, 0x1F, 0x07, 0x03, 0x01 }; // speaker
+	unsigned char music[8] = { 0x01, 0x03, 0x05, 0x09, 0x09, 0x0B, 0x1B, 0x18 }; // music symbol
+	unsigned char plug[8] = { 0x0A, 0x0A, 0x1F, 0x11, 0x11, 0x0E, 0x04, 0x04 }; //plug
+	unsigned char filled_heart[8] = { 0x00, 0x0A, 0x1F, 0x1F, 0x0E, 0x04, 0x00, 0x00 };  // filled in heart
+	unsigned char lock[8] = { 0x0E, 0x11, 0x11, 0x1F, 0x1B, 0x1B, 0x1F, 0x00 };
+	unsigned char unlock[8] = { 0x0E, 0x10, 0x10, 0x1F, 0x1B, 0x1B, 0x1F, 0x00 };
+	unsigned char smiley[8] = { 0x00, 0x00, 0x0A, 0x00, 0x04, 0x11, 0x0E, 0x00 }; // smiley face
+	unsigned char worried[8] = { 0x0A, 0x11, 0x00, 0x0A, 0x00, 0x0E, 0x11, 0x00 };
+	unsigned char angry[8] = { 0x11, 0x0A, 0x00, 0x0A, 0x00, 0x0E, 0x11, 0x11 };
+		
+
 	
 	// Transitions
 	switch (Display_state) {
@@ -405,17 +441,17 @@ int TickFct_Display (int Display_state) {
 			}
 			break;
 		case Display_Input:
-			if (input_num == 0) {
+			if (alarm == 1) {
+				Display_state = Display_Alarm;
+			}
+			else if (input_num == 0) {
 				Display_state = Display_Default;
 			}
 			else if (valid /*unlocked*/ == 1) {
 				Display_state = Display_Unlock;
 			}
-			else if (invalid > 0) {
+			else if (invalid > 0 && input_num == 5) {
 				Display_state = Display_Invalid;
-			}
-			else if (alarm == 1) {
-				Display_state = Display_Alarm;
 			}
 			break;
 		case Display_Unlock:
@@ -430,7 +466,7 @@ int TickFct_Display (int Display_state) {
 			Display_state = Display_Default;
 			break;
 		case Display_Invalid: 
-			if (invalid >= 3) {
+			if (attempts >= 3) {
 				Display_state = Display_Alarm;
 			}
 			i++;
@@ -464,7 +500,22 @@ int TickFct_Display (int Display_state) {
 			LCD_WriteData(code[3]);
 			LCD_WriteData(code[4]);*/
 			
-			LCD_DisplayString(17, "3 ATTEMPTS MAX _"); // NOTE: CUSTOM CHAR HERE
+			if (attempts == 0) {
+				LCD_DisplayString(17, "3 ATTEMPTS MAX"); // NOTE: CUSTOM CHAR HERE
+				LCD_Custom_Char(7, lock);
+			}
+			else if (attempts == 1) {
+				LCD_DisplayString(17, "2/3 TRIES LEFT");
+				LCD_Custom_Char(7, smiley);
+			}
+			else if (attempts == 2) {
+				LCD_DisplayString(17, "1/3 TRIES LEFT");
+				LCD_Custom_Char(7, worried);
+			}
+			else if (attempts >= 3) {
+				LCD_DisplayString(17, "MAX TRIES HIT"); // NOTE: maybe a char here?
+				LCD_Custom_Char(7, angry);
+			}
 			break;
 		case Display_Input:
 			LCD_ClearScreen();
@@ -548,8 +599,10 @@ int TickFct_Display (int Display_state) {
 			break;
 		case Display_Unlock:
 			LCD_ClearScreen();
-			LCD_DisplayString(1, "WELCOME HOME _"); // NOTE Heart custom char
-			//LCD_DisplayString(9, "#=LOCK; SET=0 3s");
+			LCD_DisplayString(1, "#=LOCK; SET=0 3s");
+			LCD_DisplayString(19, "WELCOME HOME"); // NOTE custom char hollow heart, full heart
+			LCD_Custom_Char(0, heart);
+			LCD_Custom_Char(7, filled_heart);
 			break;
 		case Display_Lock:
 			LCD_ClearScreen();
@@ -562,18 +615,15 @@ int TickFct_Display (int Display_state) {
 			LCD_Cursor(1);
 			LCD_WriteData(invalid);
 			LCD_DisplayString(1, "INVALID CODE.");
-			if (invalid == 1) {
-				LCD_ClearScreen();
-				LCD_DisplayString(1, "2/3 TRIES LEFT");
+			/*if (attempts == 1) {
+				LCD_DisplayString(17, "2/3 TRIES LEFT");
 			}
-			else if (invalid == 2) {
-				LCD_ClearScreen();
-				LCD_DisplayString(1, "1/3 TRIES LEFT");
+			else if (attempts == 2) {
+				LCD_DisplayString(17, "1/3 TRIES LEFT");
 			}
-			else if (invalid >= 3) {
-				LCD_ClearScreen();
-				LCD_DisplayString(1, "MAX TRIES HIT"); // NOTE: maybe a char here?
-			}
+			else if (attempts >= 3) {
+				LCD_DisplayString(17, "MAX TRIES HIT"); // NOTE: maybe a char here?
+			}*/
 			break;
 		case Display_Alarm:
 			// NOTE: might want to change alarm to be checked for > 0 elsewhere
@@ -583,45 +633,52 @@ int TickFct_Display (int Display_state) {
 			//  alarm++;
 			//}
 			LCD_ClearScreen();
-			LCD_DisplayString(1, "INTRUDER ALERT _"); // NOTE: special char here
-			LCD_DisplayString(9, "DOGS RELEASED __"); // NOTE: special char here? Skull?
+			LCD_DisplayString(1, "COPS ARE COMING."); // NOTE: special char here? Skull?
+			if (motion_trigger == 1) {
+				LCD_DisplayString(19, "MOTION FOUND"); // NOTE: special char here
+				LCD_Custom_Char(7, angry);
+			}
+			else {
+				LCD_DisplayString(17, "INTRUDER ALERT"); // NOTE: special char here
+				LCD_Custom_Char(7, angry);
+			}
 			break;
 		case Display_Reset:
 			LCD_ClearScreen();
 			if (reset < 7) {
 				LCD_DisplayString(1, "# THEN NEW CODE");
 				if (reset == 2) {
-					LCD_DisplayString(9, "#");
+					LCD_DisplayString(17, "#____");
 				}
 				if (reset == 3) {
-					LCD_DisplayString(9, "##");
+					LCD_DisplayString(17, "#*___");
 				}
 				if (reset == 4) {
-					LCD_DisplayString(9, "###");
+					LCD_DisplayString(17, "#**__");
 				}
 				if (reset == 5) {
-					LCD_DisplayString(9, "####");
+					LCD_DisplayString(17, "#***_");
 				}
 				if (reset == 6) {
-					LCD_DisplayString(9, "#####");
+					LCD_DisplayString(17, "#****");
 				}
 			}
 			else {
 				LCD_DisplayString(1, "# THEN RE-TYPE");
 				if (reset == 7) {
-					LCD_DisplayString(9, "#");
+					LCD_DisplayString(17, "#____");
 				}
 				if (reset == 8) {
-					LCD_DisplayString(9, "##");
+					LCD_DisplayString(17, "#*___");
 				}
 				if (reset == 9) {
-					LCD_DisplayString(9, "###");
+					LCD_DisplayString(17, "#**__");
 				}
 				if (reset == 10) {
-					LCD_DisplayString(9, "####");
+					LCD_DisplayString(17, "#***_");
 				}
 				if (reset == 11) {
-					LCD_DisplayString(9, "#####");
+					LCD_DisplayString(17, "#****");
 				}
 			}
 			break;

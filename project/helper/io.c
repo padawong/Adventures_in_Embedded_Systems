@@ -6,6 +6,13 @@
 #define SET_BIT(p,i) ((p) |= (1 << (i)))
 #define CLR_BIT(p,i) ((p) &= ~(1 << (i)))
 #define GET_BIT(p,i) ((p) & (1 << (i)))
+#define LCD_Data_Dir DDRC	/* Define LCD data port direction */
+#define LCD_Command_Dir DDRD	/* Define LCD command port direction register */
+#define LCD_Data_Port PORTC	/* Define LCD data port */
+#define LCD_Command_Port PORTD	/* Define LCD data port */
+#define RS1 PD6			/* Define Register Select signal pin */
+#define RW PD5			/* Define Read/Write signal pin */
+#define EN PD7			/* Define Enable signal pin */
           
 /*-------------------------------------------------------------------------*/
 
@@ -78,3 +85,36 @@ void delay_ms(int miliSec) //for 8 Mhz crystal
    asm("nop");
   }
 }
+
+ void LCD_Char (unsigned char char_data)  /* LCD data write function */
+ {
+	 LCD_Data_Port= char_data;
+	 LCD_Command_Port |= (1<<RS1);	/* RS1=1 Data reg. */
+	 LCD_Command_Port &= ~(1<<RW);	/* RW=0 write operation */
+	 LCD_Command_Port |= (1<<EN);	/* Enable Pulse */
+	 _delay_us(1);
+	 LCD_Command_Port &= ~(1<<EN);
+	 _delay_ms(2);			/* Data write delay */
+ }
+
+ void LCD_Command(unsigned char cmnd)
+ {
+	 LCD_Data_Port= cmnd;
+	 LCD_Command_Port &= ~(1<<RS1);	/* RS1=0 command reg. */
+	 LCD_Command_Port &= ~(1<<RW);	/* RW=0 Write operation */
+	 LCD_Command_Port |= (1<<EN);	/* Enable pulse */
+	 _delay_us(1);
+	 LCD_Command_Port &= ~(1<<EN);
+	 _delay_ms(2);
+ }
+
+ void LCD_Custom_Char (unsigned char loc, unsigned char *msg)
+ {
+	 unsigned char i;
+	 if(loc<8)
+	 {
+		 LCD_Command (0x40 + (loc*8));	/* Command 0x40 and onwards forces the device to point CGRAM address */
+		 for(i=0;i<8;i++)	/* Write 8 byte for generation of 1 character */
+		 LCD_Char(msg[i]);
+	 }
+ }
