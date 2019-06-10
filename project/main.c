@@ -73,15 +73,9 @@ void TimerSet(unsigned long M) {
 #define num_tasks 5
 task tasks[num_tasks];
 
-/*
 #include <avr/eeprom.h>
-// EEPROM attempt without a working board :'|
-#define CODE_ADDRESS 0x00
-EEPROM_write(CODE_ADDRESS, '#');
-for (unsigned char i = 1; i < 6; i++) {
-	EEPROM_write(i + CODE_ADDRESS, 0);
-}
-*/
+#define NUM_EXECUTIONS_ADDRESS 0x00
+
 
 // Global variables
 unsigned char start;
@@ -91,13 +85,15 @@ unsigned char input_num;
 unsigned char invalid; // Display and Alarm check if invalid > 0
 unsigned char attempts;
 unsigned char alarm;
+unsigned char keypad_alarm;
 unsigned char valid;
 //unsigned char lock;
 unsigned char locking;
 unsigned char unlocking;
 unsigned char reset;
-unsigned int PIR_Status = 0;
-unsigned int motion_trigger = 0;
+unsigned int PIR_Status;
+unsigned int motion_delay;
+unsigned int motion_trigger;
 
 //unsigned char TEST[5] = "-----";
 
@@ -123,7 +119,11 @@ int TickFct_Input (int Input_state) {
 			invalid = 0;
 			attempts = 0;
 			alarm = 0;
+			keypad_alarm = 0;
 			valid = 0;
+			PIR_Status = 0;
+			motion_delay = 0;
+			motion_trigger = 0;
 			//lock = 0;
 			//locking = 0;
 			//unlocking = 0;
@@ -214,7 +214,7 @@ int TickFct_Input (int Input_state) {
 			}
 			invalid = 0;
 			input_num = 0;
-			if (alarm > 0) {
+			if (keypad_alarm > 0) {
 				Input_state = Input_Alarm;
 			}
 			else {
@@ -223,7 +223,7 @@ int TickFct_Input (int Input_state) {
 			break;
 			
 		case Input_Alarm:
-			alarm = 1;
+			keypad_alarm = 1;
 			break;
 			
 		default: break;
@@ -285,26 +285,31 @@ int TickFct_Lock (int Lock_state) {
 // SM: Alarm; Raises the alarm when alarm engaged
 enum Alarm_States {Alarm_Wait, Alarm_Motion, Alarm_Alarm} Alarm_state ;
 int TickFct_Alarm (int Alarm_state) {
-	unsigned char i;
+	unsigned char i = 0;
 	// Transitions
 	switch (Alarm_state) {
 		case Alarm_Wait:
-			if (alarm == 1) {
+			if (keypad_alarm == 1) {
 				Alarm_state = Alarm_Alarm;
 			}
 			if (((PIND) & (1<<PIR_sensor)) == 1) {
 				PIR_Status = 1;
-				i = 0;
 				Alarm_state = Alarm_Motion;
 			}
 			break;
 		case Alarm_Motion:
-			if (i < 300 && (((PIND) & (1<<PIR_sensor)) == 0)) {
+			if (i < 5 && (((PIND) & (1<<PIR_sensor)) == 0)) {
 				PIR_Status = 0;
+				i = 0;
+				motion_delay = 0;
+				Alarm_state = Alarm_Wait;
 			}
-			else if (i >= 300 && PIR_Status > 0) {
+			else if (i >= 5 && PIR_Status > 0) {
 				motion_trigger = 1; 
 				Alarm_state = Alarm_Alarm;
+			}
+			else {
+				motion_delay = 1;
 			}
 		case Alarm_Alarm:
 			// NO WAY OUT WEE WOO WEE WOO
@@ -318,6 +323,8 @@ int TickFct_Alarm (int Alarm_state) {
 	switch(Alarm_state) {
 		case Alarm_Wait:
 			break; // Do nothing
+		case Alarm_Motion:
+			//motion_delay = 1;
 		case Alarm_Alarm: // WEE WOO WEE WOO
 			// NOTE: Do the alarm action; LED or speaker?
 			break;
@@ -414,7 +421,7 @@ int TickFct_Reset (int Reset_state) {
 }
 
 // SM: Display; 
-enum Display_States {Display_Default, Display_Input, Display_Unlock, Display_Lock, Display_Invalid, Display_Alarm, Display_Reset} Display_state ;
+enum Display_States {Display_Default, Display_Input, Display_Unlock, Display_Lock, Display_Invalid, Display_Alarm, Display_Reset, Display_Motion} Display_state ;
 int TickFct_Display (int Display_state) {
 	
 	static unsigned char i = 0;
@@ -439,6 +446,12 @@ int TickFct_Display (int Display_state) {
 			if (input_num > 0) {
 				Display_state = Display_Input;
 			}
+			else if (motion_delay == 1) {
+				Display_state = Display_Motion;
+			}
+			else if (attempts >= 3 || motion_trigger == 1) {
+				Display_state = Display_Alarm;
+			}
 			break;
 		case Display_Input:
 			if (alarm == 1) {
@@ -451,6 +464,7 @@ int TickFct_Display (int Display_state) {
 				Display_state = Display_Unlock;
 			}
 			else if (invalid > 0 && input_num == 5) {
+				i = 0;
 				Display_state = Display_Invalid;
 			}
 			break;
@@ -470,7 +484,7 @@ int TickFct_Display (int Display_state) {
 				Display_state = Display_Alarm;
 			}
 			i++;
-			if (i > 10) {
+			if (i > 5) {
 				Display_state = Display_Default;
 			}
 			break;
@@ -482,6 +496,11 @@ int TickFct_Display (int Display_state) {
 				Display_state = Display_Lock;
 			}
 			break;
+		case Display_Motion:
+			if (motion_delay == 0) {
+				Display_state = Display_Default;
+			}
+			break;
 		default:
 			//Display_state = Display_Default;
 			break;
@@ -491,6 +510,7 @@ int TickFct_Display (int Display_state) {
 	switch(Display_state) {
 		case Display_Default:
 			// Starting at position 1 on the LCD screen, writes string
+			LCD_ClearScreen();
 			LCD_DisplayString(1, "PUSH # THEN CODE"); // 16 chars exactly
 			//LCD_DisplayString(1, "hello.");
 			/*LCD_Cursor(7);
@@ -503,18 +523,34 @@ int TickFct_Display (int Display_state) {
 			if (attempts == 0) {
 				LCD_DisplayString(17, "3 ATTEMPTS MAX"); // NOTE: CUSTOM CHAR HERE
 				LCD_Custom_Char(7, lock);
+				LCD_Command(0x80);
+				LCD_Command(0xc0);
+				LCD_Cursor(32);
+				LCD_Char(7);
 			}
 			else if (attempts == 1) {
 				LCD_DisplayString(17, "2/3 TRIES LEFT");
 				LCD_Custom_Char(7, smiley);
+				LCD_Command(0x80);
+				LCD_Command(0xc0);
+				LCD_Cursor(32);
+				LCD_Char(7);
 			}
 			else if (attempts == 2) {
 				LCD_DisplayString(17, "1/3 TRIES LEFT");
 				LCD_Custom_Char(7, worried);
+				LCD_Command(0x80);
+				LCD_Command(0xc0);
+				LCD_Cursor(32);
+				LCD_Char(7);
 			}
 			else if (attempts >= 3) {
 				LCD_DisplayString(17, "MAX TRIES HIT"); // NOTE: maybe a char here?
 				LCD_Custom_Char(7, angry);
+				LCD_Command(0x80);
+				LCD_Command(0xc0);
+				LCD_Cursor(32);
+				LCD_Char(7);
 			}
 			break;
 		case Display_Input:
@@ -530,68 +566,77 @@ int TickFct_Display (int Display_state) {
 			*/
 			LCD_DisplayString(1, "PUSH # THEN CODE"); // 16 chars exactly
 			if (input_num == 0) {
-				LCD_Cursor(1);
-				LCD_WriteData('0');
+				//LCD_Cursor(1);
+				//LCD_WriteData('0');
+			}
+			if (input_num > 0) {
+				LCD_Cursor(17);
+				LCD_WriteData('#');
 			}
 			if (input_num == 1) {
-				LCD_Cursor(17);
-				LCD_WriteData('1'/*input[0]*/);
-				
 				LCD_Cursor(18);
+				//LCD_WriteData('1'/*input[0]*/);
+				
+				//LCD_Cursor(18);
 				unsigned char x;
-				for (x = 0; x < input_num; x++) {
-					unsigned char temp = input[x];
-					LCD_WriteData(temp);
+				for (x = 1; x < input_num; x++) {
+					/*unsigned char temp = input[x];
+					LCD_WriteData(temp);*/
+					LCD_WriteData('*');
 				}
 			}
 			else if (input_num == 2) {
-				LCD_Cursor(17);
-				LCD_WriteData('2'/*input[0]*/);
-				
 				LCD_Cursor(18);
+				//LCD_WriteData('2'/*input[0]*/);
+				
+				//LCD_Cursor(18);
 				unsigned char x;
-				for (x = 0; x < input_num; x++) {
-					unsigned char temp = input[x];
-					LCD_WriteData(temp);
+				for (x = 1; x < input_num; x++) {
+					/*unsigned char temp = input[x];
+					LCD_WriteData(temp);*/
+					LCD_WriteData('*');
 				}
 
 				//LCD_DisplayString(1, "##");
 			}
 			if (input_num == 3) {
-				LCD_Cursor(17);
-				LCD_WriteData('3'/*input[0]*/);
-				
 				LCD_Cursor(18);
+				//LCD_WriteData('3'/*input[0]*/);
+				
+				//LCD_Cursor(18);
 				unsigned char x;
-				for (x = 0; x < input_num; x++) {
-					unsigned char temp = input[x];
-					LCD_WriteData(temp);
+				for (x = 1; x < input_num; x++) {
+					/*unsigned char temp = input[x];
+					LCD_WriteData(temp);*/
+					LCD_WriteData('*');
 				}
 
 				//LCD_DisplayString(1, "###");
 			}
 			if (input_num == 4) {
-				LCD_Cursor(17);
-				LCD_WriteData('4'/*input[0]*/);
-				
 				LCD_Cursor(18);
+				//LCD_WriteData('4'/*input[0]*/);
+				
+				//LCD_Cursor(18);
 				unsigned char x;
-				for (x = 0; x < input_num; x++) {
-					unsigned char temp = input[x];
-					LCD_WriteData(temp);
+				for (x = 1; x < input_num; x++) {
+					/*unsigned char temp = input[x];
+					LCD_WriteData(temp);*/
+					LCD_WriteData('*');
 				}
 				
 				//LCD_DisplayString(1, "####");
 			}
 			if (input_num == 5) {
-				LCD_Cursor(17);				
-				LCD_WriteData('5'/*input[0]*/);
+				LCD_Cursor(18);				
+				//LCD_WriteData('5'/*input[0]*/);
 				
-				LCD_Cursor(18);
+				//LCD_Cursor(18);
 				unsigned char x;
-				for (x = 0; x < input_num; x++) {
-					unsigned char temp = input[x];
-					LCD_WriteData(temp);
+				for (x = 1; x < input_num; x++) {
+					/*unsigned char temp = input[x];
+					LCD_WriteData(temp);*/
+					LCD_WriteData('*');
 				}
 				
 				//LCD_DisplayString(1, "#####");
@@ -599,14 +644,25 @@ int TickFct_Display (int Display_state) {
 			break;
 		case Display_Unlock:
 			LCD_ClearScreen();
-			LCD_DisplayString(1, "#=LOCK; SET=0 3s");
+			LCD_DisplayString(1, "HOLD # TO LOCK");
 			LCD_DisplayString(19, "WELCOME HOME"); // NOTE custom char hollow heart, full heart
-			LCD_Custom_Char(0, heart);
+			
+			LCD_Custom_Char(0, filled_heart);
+			LCD_Command(0x80);
+			LCD_Command(0xc0);
+			LCD_Cursor(17);
+			LCD_Char(0);
+			
 			LCD_Custom_Char(7, filled_heart);
+			LCD_Command(0x80);
+			LCD_Command(0xc0);
+			LCD_Cursor(32);
+			LCD_Char(7);
 			break;
 		case Display_Lock:
 			LCD_ClearScreen();
 			LCD_DisplayString(1, "DOOR LOCKED.");
+			
 			// NOTE: maybe a special char here?
 			break;
 		case Display_Invalid:
@@ -632,16 +688,26 @@ int TickFct_Display (int Display_state) {
 			//	display
 			//  alarm++;
 			//}
-			LCD_ClearScreen();
+			/*LCD_ClearScreen();
 			LCD_DisplayString(1, "COPS ARE COMING."); // NOTE: special char here? Skull?
 			if (motion_trigger == 1) {
 				LCD_DisplayString(19, "MOTION FOUND"); // NOTE: special char here
 				LCD_Custom_Char(7, angry);
-			}
-			else {
-				LCD_DisplayString(17, "INTRUDER ALERT"); // NOTE: special char here
+				LCD_Command(0x80);
+				LCD_Command(0xc0);
+				LCD_Cursor(32);
+				LCD_Char(7);
+			}*/
+			//else {
+				LCD_ClearScreen();
+				LCD_DisplayString(1, "INTRUDER ALERT"); // NOTE: special char here
+				LCD_DisplayString(17, "COPS INCOMING");
 				LCD_Custom_Char(7, angry);
-			}
+				LCD_Command(0x80);
+				LCD_Command(0xc0);
+				LCD_Cursor(32);
+				LCD_Char(7);
+			//}
 			break;
 		case Display_Reset:
 			LCD_ClearScreen();
@@ -681,6 +747,11 @@ int TickFct_Display (int Display_state) {
 					LCD_DisplayString(17, "#****");
 				}
 			}
+			break;
+		case Display_Motion:
+			LCD_ClearScreen();
+			LCD_DisplayString(1, "MOTION DETECTED");
+			LCD_DisplayString(17, "CAMERA RECORDING");
 			break;
 		default: break;
 	}
