@@ -1,0 +1,5 @@
+These files are the helper files from labs
+
+io.c has been edited:
+- LCD_DisplayString() has been adjusted to remove LCD_ClearScreen() in order to allow text to be written to multiple lines
+- Functions have been added to allow the addition of custom characters

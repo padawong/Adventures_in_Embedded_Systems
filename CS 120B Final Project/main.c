@@ -2,14 +2,17 @@
  *	Name & E-mail: Erin Wong ewong012@ucr.edu 
  *	Lab Section: 026
  *	Assignment: CS/EE 120B Final Project
- *	I acknowledge all content contained herein, excluding template or example
- *	code, is my own original work.
  */
 
 // Servo code with help from  https://www.electronicwings.com/avr-atmega/servo-motor-interfacing-with-atmega16 
 //   and https://sites.google.com/site/qeewiki/books/avr-guide/pwm-on-the-atmega328
 //   and http://www.avrbeginners.net/architecture/timers/timers.html
 //	 and https://maxembedded.files.wordpress.com/2011/07/wave-generation-mode-bit-description-ctc.png?resize=640%2C356
+
+// Custom LCD Chars code with help from https://www.electronicwings.com/avr-atmega/lcd-custom-character-display-using-atmega-16-32-
+
+// PIR sensor code with help from https://exploreembedded.com/wiki/PIR_motion_Sensor_interface_with_Atmega128
+
 // Default CPU Frequency: 1MHz
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -38,7 +41,7 @@ void TimerOn() {
 	// NOTE: I thought I needed to have TCCR1B as follows for the servo to work, but it was causing super long cycle times
 	//TCCR1B = (1<<WGM12)|(1<<WGM13)|(1<<CS10)|(1<<CS11); // CTC1 = WGM12 //
 	TCCR1B = 0x0B; // Working fine with servo
-	OCR1A = 60; // Changed from 125 to accommodate servo hopefully
+	OCR1A = 60; // Changed from 125 to accommodate servo
 	TIMSK1 = 0x02;
 	TCNT1=0;
 
@@ -67,9 +70,6 @@ void TimerSet(unsigned long M) {
 	_avr_timer_cntcurr = _avr_timer_M;
 }
 
-// LCD Special characters
-
-
 #define num_tasks 5
 task tasks[num_tasks];
 
@@ -87,15 +87,12 @@ unsigned char attempts;
 unsigned char alarm;
 unsigned char keypad_alarm;
 unsigned char valid;
-//unsigned char lock;
 unsigned char locking;
 unsigned char unlocking;
 unsigned char reset;
 unsigned int PIR_Status;
 unsigned int motion_delay;
 unsigned int motion_trigger;
-
-//unsigned char TEST[5] = "-----";
 
 // SM: Input; Accepts input from keypad and writes to global variables: input_num, default, alarm, lock, unlock, input, reset, invalid
 enum Input_States {Input_Start, Input_Wait, Input_Attempt, Input_Valid, Input_Invalid, Input_Alarm } Input_state ;	
@@ -105,6 +102,7 @@ int TickFct_Input (int Input_state) {
 	
 	// Transitions
 	switch (Input_state) {
+		// Most variables are reset here upon system lock
 		case Input_Start: 
 			start = 1;
 			TCCR1A = (1<<WGM11)|(1<<COM1A1);
@@ -124,9 +122,6 @@ int TickFct_Input (int Input_state) {
 			PIR_Status = 0;
 			motion_delay = 0;
 			motion_trigger = 0;
-			//lock = 0;
-			//locking = 0;
-			//unlocking = 0;
 			reset = 0; // Input_SM does nothing with this variable
 			Input_state = Input_Wait;
 			break;
@@ -139,28 +134,21 @@ int TickFct_Input (int Input_state) {
 			break;
 			
 		case Input_Attempt:
-			/*if (input_num < 5 && input[input_num] == code[input_num]) {
-				input_num++;
-			}
-			else */
 			if ((input_num == 5) && (input[input_num - 1] == code[input_num - 1])) {
 				Input_state = Input_Valid;
 			}
 			else if (input_num < 6 && (input[input_num - 1] != code[input_num - 1])) {
 				invalid = 1;
-				//Input_state = Input_Invalid;
 			}
 			if (input_num == 5 && invalid > 0) {
 				Input_state = Input_Invalid;
 			}
-			//TEST[input_num] = input[input_num];
 			break;
 		
 		case Input_Valid: 
 			value = GetKeypadKey();
 			if(value != '\0') {
 				if (value == '#') {
-					//lock = 1;
 					Input_state = Input_Start;
 				}
 			}
@@ -203,8 +191,6 @@ int TickFct_Input (int Input_state) {
 		
 		case Input_Valid:
 			valid = 1;
-			//unlocking = 1;
-			// NOTE: NEED TO DO THIS - if 0 (and # ?) have been held down for 3+ seconds, set reset = 1
 			break;
 		
 		case Input_Invalid:
@@ -326,7 +312,7 @@ int TickFct_Alarm (int Alarm_state) {
 		case Alarm_Motion:
 			//motion_delay = 1;
 		case Alarm_Alarm: // WEE WOO WEE WOO
-			// NOTE: Do the alarm action; LED or speaker?
+			// NOTE: Do the alarm action; LED or speaker in the future
 			break;
 		default: break;
 	}
@@ -334,6 +320,7 @@ int TickFct_Alarm (int Alarm_state) {
 }
 
 // SM: Reset; Allows user to input custom 4-char unlock code
+/* RAN OUT OF TIME TO TEST AND FULLY IMPLEMENT DUE TO BOARD NOT WORKING THE NIGHT BEFORE SUBMISSION
 enum Reset_States {Reset_Start, Reset_Wait, Reset_Reset, Reset_Confirm} Reset_state;
 int TickFct_Reset (int Reset_state) {
 	unsigned char value;
@@ -411,14 +398,13 @@ int TickFct_Reset (int Reset_state) {
 					reset = 1;
 					Reset_state = Reset_Reset;
 				}
-				// NOTE: I'm not sure that code is being actually set anywhere
 			}
 			break;
 		default: break;
 	}
 	
 	return Reset_state;
-}
+}*/
 
 // SM: Display; 
 enum Display_States {Display_Default, Display_Input, Display_Unlock, Display_Lock, Display_Invalid, Display_Alarm, Display_Reset, Display_Motion} Display_state ;
@@ -426,11 +412,7 @@ int TickFct_Display (int Display_state) {
 	
 	static unsigned char i = 0;
 	unsigned char heart[8] = { 0x00, 0x0A, 0x15, 0x11, 0x0A, 0x04, 0x00, 0x00 }; // heart
-	unsigned char phone[8] = { 0x04, 0x1F, 0x11, 0x11, 0x1F, 0x1F, 0x1F, 0x1F }; // phone
 	unsigned char bell[8] = { 0x04, 0x0E, 0x0E, 0x0E, 0x1F, 0x00, 0x04, 0x00 }; // bell
-	unsigned char speaker[8] = { 0x01, 0x03, 0x07, 0x1F, 0x1F, 0x07, 0x03, 0x01 }; // speaker
-	unsigned char music[8] = { 0x01, 0x03, 0x05, 0x09, 0x09, 0x0B, 0x1B, 0x18 }; // music symbol
-	unsigned char plug[8] = { 0x0A, 0x0A, 0x1F, 0x11, 0x11, 0x0E, 0x04, 0x04 }; //plug
 	unsigned char filled_heart[8] = { 0x00, 0x0A, 0x1F, 0x1F, 0x0E, 0x04, 0x00, 0x00 };  // filled in heart
 	unsigned char lock[8] = { 0x0E, 0x11, 0x11, 0x1F, 0x1B, 0x1B, 0x1F, 0x00 };
 	unsigned char unlock[8] = { 0x0E, 0x10, 0x10, 0x1F, 0x1B, 0x1B, 0x1F, 0x00 };
@@ -438,8 +420,6 @@ int TickFct_Display (int Display_state) {
 	unsigned char worried[8] = { 0x0A, 0x11, 0x00, 0x0A, 0x00, 0x0E, 0x11, 0x00 };
 	unsigned char angry[8] = { 0x11, 0x0A, 0x00, 0x0A, 0x00, 0x0E, 0x11, 0x11 };
 		
-
-	
 	// Transitions
 	switch (Display_state) {
 		case Display_Default:
@@ -460,7 +440,7 @@ int TickFct_Display (int Display_state) {
 			else if (input_num == 0) {
 				Display_state = Display_Default;
 			}
-			else if (valid /*unlocked*/ == 1) {
+			else if (valid == 1) {
 				Display_state = Display_Unlock;
 			}
 			else if (invalid > 0 && input_num == 5) {
@@ -509,19 +489,11 @@ int TickFct_Display (int Display_state) {
 	// Actions
 	switch(Display_state) {
 		case Display_Default:
-			// Starting at position 1 on the LCD screen, writes string
 			LCD_ClearScreen();
 			LCD_DisplayString(1, "PUSH # THEN CODE"); // 16 chars exactly
-			//LCD_DisplayString(1, "hello.");
-			/*LCD_Cursor(7);
-			LCD_WriteData(code[0]);
-			LCD_WriteData(code[1]);
-			LCD_WriteData(code[2]);
-			LCD_WriteData(code[3]);
-			LCD_WriteData(code[4]);*/
 			
 			if (attempts == 0) {
-				LCD_DisplayString(17, "3 ATTEMPTS MAX"); // NOTE: CUSTOM CHAR HERE
+				LCD_DisplayString(17, "3 ATTEMPTS MAX");
 				LCD_Custom_Char(7, lock);
 				LCD_Command(0x80);
 				LCD_Command(0xc0);
@@ -555,15 +527,6 @@ int TickFct_Display (int Display_state) {
 			break;
 		case Display_Input:
 			LCD_ClearScreen();
-			/*
-			LCD_DisplayString(1, "HELLO.");
-			LCD_Cursor(7);
-			LCD_WriteData(code[0]);
-			LCD_WriteData(code[1]);
-			LCD_WriteData(code[2]);
-			LCD_WriteData(code[3]);
-			LCD_WriteData(code[4]);
-			*/
 			LCD_DisplayString(1, "PUSH # THEN CODE"); // 16 chars exactly
 			if (input_num == 0) {
 				//LCD_Cursor(1);
@@ -575,77 +538,52 @@ int TickFct_Display (int Display_state) {
 			}
 			if (input_num == 1) {
 				LCD_Cursor(18);
-				//LCD_WriteData('1'/*input[0]*/);
 				
-				//LCD_Cursor(18);
 				unsigned char x;
 				for (x = 1; x < input_num; x++) {
-					/*unsigned char temp = input[x];
-					LCD_WriteData(temp);*/
 					LCD_WriteData('*');
 				}
 			}
 			else if (input_num == 2) {
 				LCD_Cursor(18);
-				//LCD_WriteData('2'/*input[0]*/);
 				
-				//LCD_Cursor(18);
 				unsigned char x;
 				for (x = 1; x < input_num; x++) {
-					/*unsigned char temp = input[x];
-					LCD_WriteData(temp);*/
 					LCD_WriteData('*');
 				}
 
-				//LCD_DisplayString(1, "##");
 			}
 			if (input_num == 3) {
 				LCD_Cursor(18);
-				//LCD_WriteData('3'/*input[0]*/);
-				
-				//LCD_Cursor(18);
+
 				unsigned char x;
 				for (x = 1; x < input_num; x++) {
-					/*unsigned char temp = input[x];
-					LCD_WriteData(temp);*/
 					LCD_WriteData('*');
 				}
 
-				//LCD_DisplayString(1, "###");
 			}
 			if (input_num == 4) {
 				LCD_Cursor(18);
-				//LCD_WriteData('4'/*input[0]*/);
-				
-				//LCD_Cursor(18);
 				unsigned char x;
 				for (x = 1; x < input_num; x++) {
-					/*unsigned char temp = input[x];
-					LCD_WriteData(temp);*/
 					LCD_WriteData('*');
 				}
 				
-				//LCD_DisplayString(1, "####");
 			}
 			if (input_num == 5) {
 				LCD_Cursor(18);				
-				//LCD_WriteData('5'/*input[0]*/);
 				
-				//LCD_Cursor(18);
 				unsigned char x;
 				for (x = 1; x < input_num; x++) {
-					/*unsigned char temp = input[x];
-					LCD_WriteData(temp);*/
 					LCD_WriteData('*');
 				}
 				
-				//LCD_DisplayString(1, "#####");
 			}
 			break;
 		case Display_Unlock:
 			LCD_ClearScreen();
 			LCD_DisplayString(1, "HOLD # TO LOCK");
-			LCD_DisplayString(19, "WELCOME HOME"); // NOTE custom char hollow heart, full heart
+			LCD_DisplayString(19, "WELCOME HOME");
 			
 			LCD_Custom_Char(0, filled_heart);
 			LCD_Command(0x80);
@@ -662,51 +600,22 @@ int TickFct_Display (int Display_state) {
 		case Display_Lock:
 			LCD_ClearScreen();
 			LCD_DisplayString(1, "DOOR LOCKED.");
-			
-			// NOTE: maybe a special char here?
 			break;
 		case Display_Invalid:
-			// NOTE: make this message persist for 3 seconds
 			LCD_ClearScreen();
 			LCD_Cursor(1);
 			LCD_WriteData(invalid);
 			LCD_DisplayString(1, "INVALID CODE.");
-			/*if (attempts == 1) {
-				LCD_DisplayString(17, "2/3 TRIES LEFT");
-			}
-			else if (attempts == 2) {
-				LCD_DisplayString(17, "1/3 TRIES LEFT");
-			}
-			else if (attempts >= 3) {
-				LCD_DisplayString(17, "MAX TRIES HIT"); // NOTE: maybe a char here?
-			}*/
 			break;
 		case Display_Alarm:
-			// NOTE: might want to change alarm to be checked for > 0 elsewhere
-			// if (alarm == 1) {
-			//	clear
-			//	display
-			//  alarm++;
-			//}
-			/*LCD_ClearScreen();
-			LCD_DisplayString(1, "COPS ARE COMING."); // NOTE: special char here? Skull?
-			if (motion_trigger == 1) {
-				LCD_DisplayString(19, "MOTION FOUND"); // NOTE: special char here
-				LCD_Custom_Char(7, angry);
-				LCD_Command(0x80);
-				LCD_Command(0xc0);
-				LCD_Cursor(32);
-				LCD_Char(7);
-			}*/
-			//else {
-				LCD_ClearScreen();
-				LCD_DisplayString(1, "INTRUDER ALERT"); // NOTE: special char here
-				LCD_DisplayString(17, "COPS INCOMING");
-				LCD_Custom_Char(7, angry);
-				LCD_Command(0x80);
-				LCD_Command(0xc0);
-				LCD_Cursor(32);
-				LCD_Char(7);
+			LCD_ClearScreen();
+			LCD_DisplayString(1, "INTRUDER ALERT"); // NOTE: special char here
+			LCD_DisplayString(17, "COPS INCOMING");
+			LCD_Custom_Char(7, angry);
+			LCD_Command(0x80);
+			LCD_Command(0xc0);
+			LCD_Cursor(32);
+			LCD_Char(7);
 			//}
 			break;
 		case Display_Reset:
@@ -816,10 +725,7 @@ int main(void) {
 	tasks_init();
 
 	unsigned char i;
-	//LCD_DisplayString(1, "Hello, World!");
-	//LCD_Cursor(17);
-	//LCD_DisplayString(16, "1234567890123456");
-
+	
 	while (1) {
 		for (i = 0; i < num_tasks; i++) {
 			//LCD_DisplayString(1, "TEST");

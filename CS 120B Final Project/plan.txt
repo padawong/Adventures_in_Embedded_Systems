@@ -3,8 +3,6 @@
 Components: 
 
 - Keypad for code input and reset
-  * STILL HAVING A GHOSTING PROBLEM ON COLUMN 0
-    + Just stick to the other columns
 
 - EEPROM to retain correct input code despite shutdown
 
