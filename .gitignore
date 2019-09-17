@@ -1,5 +1,4 @@
 .atsuo
-*.atsln
 *.xml
 *.ccproj
 *.eep
@@ -11,4 +10,5 @@
 *.d
 *.o
 *.mk
+*.atsln
 Makefile
