@@ -1,8 +1,4 @@
-
-// Permission to copy is granted provided that this header remains intact. 
-// This software is provided with no warranties.
-
-////////////////////////////////////////////////////////////////////////////////
+// Code adjusted to acommodate specific keypad
 
 // Returns '\0' if no key pressed, else returns char '1', '2', ... '9', 'A', ...
 // If multiple keys pressed, returns leftmost-topmost one
