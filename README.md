@@ -16,4 +16,4 @@ Projects completed using an ATMEGA1284-PU and Atmel Studio
 
 ## Image of Home Security project setup
 As Galileo said: _"A messy breadboard is a good breadboard. You should hire this girl."_
-![Image of Home Security project setup](https://github.com/padawong/Adventures_in_Embedded_Systems/blob/master/Home_Security_Project/Home%20Security%20Project.png?raw=true)
+![Image of Home Security project setup](https://github.com/padawong/Adventures_in_Embedded_Systems/blob/master/Under_Lock_and_C/Home%20Security%20Project.png?raw=true)
