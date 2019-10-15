@@ -1,17 +1,12 @@
-/*
- *	Name & E-mail: Erin Wong ewong012@ucr.edu 
- *	Lab Section: 026
- *	Assignment: CS/EE 120B Final Project
- */
-
-// Servo code with help from  https://www.electronicwings.com/avr-atmega/servo-motor-interfacing-with-atmega16 
-//   and https://sites.google.com/site/qeewiki/books/avr-guide/pwm-on-the-atmega328
-//   and http://www.avrbeginners.net/architecture/timers/timers.html
-//	 and https://maxembedded.files.wordpress.com/2011/07/wave-generation-mode-bit-description-ctc.png?resize=640%2C356
-
-// Custom LCD Chars code with help from https://www.electronicwings.com/avr-atmega/lcd-custom-character-display-using-atmega-16-32-
-
-// PIR sensor code with help from https://exploreembedded.com/wiki/PIR_motion_Sensor_interface_with_Atmega128
+// ONLINE RESOURCES:
+// Servo code: https://www.electronicwings.com/avr-atmega/servo-motor-interfacing-with-atmega16 
+//             https://sites.google.com/site/qeewiki/books/avr-guide/pwm-on-the-atmega328
+//             http://www.avrbeginners.net/architecture/timers/timers.html
+//	       https://maxembedded.files.wordpress.com/2011/07/wave-generation-mode-bit-description-ctc.png?resize=640%2C356
+//
+// Custom LCD Chars: https://www.electronicwings.com/avr-atmega/lcd-custom-character-display-using-atmega-16-32-
+//
+// PIR sensor code: https://exploreembedded.com/wiki/PIR_motion_Sensor_interface_with_Atmega128
 
 // Default CPU Frequency: 1MHz
 #include <avr/io.h>
